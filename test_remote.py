@@ -1,23 +1,19 @@
-# remote_control.py
 import os
 import pygame
 import time
-import threading
 import signal
 import sys
-from motor_control import MotorControl
 
 # Fix for headless environments (SSH, no GUI)
 os.environ["SDL_VIDEODRIVER"] = "dummy"
 
-class RemoteController:
+class TestRemoteController:
     def __init__(self):
         pygame.init()
         pygame.joystick.init()
         
         self.joystick = None
         self.running = True
-        self.motor_control = MotorControl()
         
         # Control parameters
         self.deadzone = 0.1  # Ignore joystick values below this threshold
@@ -26,11 +22,6 @@ class RemoteController:
         self.speed_multiplier = 1.0  # Normal speed multiplier
         self.turbo_multiplier = 2.0  # Turbo speed multiplier
         
-        # Smoothing parameters
-        self.current_linear = 0.0
-        self.current_angular = 0.0
-        self.smoothing_factor = 0.3  # 0.1 = very smooth, 0.9 = very responsive
-        
         # Safety and monitoring
         self.last_activity_time = time.time()
         self.watchdog_timeout = 1.0  # seconds without input before stopping
@@ -38,9 +29,9 @@ class RemoteController:
         self.emergency_stop_active = False
         
         # Control loop timing
-        self.control_loop_rate = 0.01  # 10ms = 100Hz
+        self.control_loop_rate = 0.1  # 100ms for testing
         
-        print("Remote Controller initialized")
+        print("Test Remote Controller initialized")
         print(f"Deadzone: {self.deadzone}")
         print(f"Max speeds - Linear: {self.max_linear_speed} m/s, Angular: {self.max_angular_speed} rad/s")
         print(f"Watchdog timeout: {self.watchdog_timeout} seconds")
@@ -63,29 +54,24 @@ class RemoteController:
                 self.connection_active = True
                 self.last_activity_time = time.time()
                 print(f"Joystick connected: {self.joystick.get_name()}")
+                print(f"Number of axes: {self.joystick.get_numaxes()}")
+                print(f"Number of buttons: {self.joystick.get_numbuttons()}")
                 return True
             else:
                 if self.connection_active:
                     print("Joystick disconnected")
-                    self.send_stop_command("Joystick disconnected")
                 self.connection_active = False
                 return False
         return True
     
     def send_stop_command(self, reason):
-        """Send stop command to motors"""
+        """Send stop command (test version)"""
         print(f"STOP: {reason}")
-        self.motor_control.set_linear_angular_velocities(0.0, 0.0)
-        self.current_linear = 0.0
-        self.current_angular = 0.0
     
     def emergency_stop(self, reason):
-        """Emergency stop with motor controller emergency stop"""
+        """Emergency stop (test version)"""
         print(f"EMERGENCY STOP: {reason}")
         self.emergency_stop_active = True
-        self.motor_control.emergency_stop(reason)
-        self.current_linear = 0.0
-        self.current_angular = 0.0
     
     def process_joystick_input(self):
         """Process joystick input and return target velocities"""
@@ -139,6 +125,15 @@ class RemoteController:
         
         if has_input:
             self.last_activity_time = time.time()
+            print(f"Input: Linear={target_linear:.2f}, Angular={target_angular:.2f}")
+        
+        # Debug: Show all button states
+        buttons_pressed = []
+        for i in range(self.joystick.get_numbuttons()):
+            if self.joystick.get_button(i):
+                buttons_pressed.append(i)
+        if buttons_pressed:
+            print(f"Buttons pressed: {buttons_pressed}")
         
         return target_linear, target_angular, has_input
     
@@ -154,13 +149,14 @@ class RemoteController:
     
     def control_loop(self):
         """Main control loop"""
-        print("Starting control loop...")
+        print("Starting test control loop...")
         print("Controls:")
         print("  Left stick Y-axis: Forward/Backward")
         print("  Right stick X-axis: Left/Right turn")
         print("  Right bumper: Turbo mode")
         print("  Button B: Emergency stop")
         print("  Ctrl+C: Quit")
+        print("\nWaiting for joystick connection...")
         
         last_connection_check = time.time()
         connection_check_interval = 1.0  # Check connection every second
@@ -176,6 +172,7 @@ class RemoteController:
                 
                 # Skip control if emergency stop is active
                 if self.emergency_stop_active:
+                    print("Emergency stop active - press Ctrl+C to quit")
                     time.sleep(self.control_loop_rate)
                     continue
                 
@@ -187,17 +184,6 @@ class RemoteController:
                 # Process joystick input
                 target_linear, target_angular, has_input = self.process_joystick_input()
                 
-                # Smooth velocity transitions
-                self.current_linear += (target_linear - self.current_linear) * self.smoothing_factor
-                self.current_angular += (target_angular - self.current_angular) * self.smoothing_factor
-                
-                # Send commands to motor controller
-                try:
-                    self.motor_control.set_linear_angular_velocities(self.current_linear, self.current_angular)
-                except Exception as e:
-                    print(f"Error sending motor commands: {e}")
-                    self.emergency_stop("Motor control error")
-                
                 # Control loop timing
                 time.sleep(self.control_loop_rate)
                 
@@ -205,20 +191,13 @@ class RemoteController:
             print("\nShutdown requested by user")
         except Exception as e:
             print(f"Unexpected error in control loop: {e}")
-            self.emergency_stop("Control loop error")
         finally:
             self.shutdown()
     
     def shutdown(self):
         """Clean shutdown"""
-        print("Shutting down remote controller...")
+        print("Shutting down test remote controller...")
         self.running = False
-        
-        # Stop motors
-        try:
-            self.motor_control.stop()
-        except Exception as e:
-            print(f"Error stopping motors: {e}")
         
         # Clean up pygame
         try:
@@ -226,7 +205,7 @@ class RemoteController:
         except Exception as e:
             print(f"Error cleaning up pygame: {e}")
         
-        print("Remote controller shutdown complete")
+        print("Test remote controller shutdown complete")
 
 def signal_handler(signum, frame):
     """Handle shutdown signals"""
@@ -244,7 +223,7 @@ def main():
     signal.signal(signal.SIGTERM, signal_handler)
     
     try:
-        controller = RemoteController()
+        controller = TestRemoteController()
         controller.control_loop()
     except Exception as e:
         print(f"Fatal error: {e}")
@@ -253,4 +232,4 @@ def main():
         sys.exit(1)
 
 if __name__ == "__main__":
-    main()
+    main() 

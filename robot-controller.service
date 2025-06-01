@@ -1,0 +1,22 @@
+[Unit]
+Description=Robot Controller Auto-Start
+After=bluetooth.service
+Wants=bluetooth.service
+
+[Service]
+Type=simple
+User=david
+Group=david
+WorkingDirectory=/home/david/waffle
+ExecStart=/home/david/waffle/start_robot.sh
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+# Environment variables
+Environment=HOME=/home/david
+Environment=USER=david
+
+[Install]
+WantedBy=multi-user.target 
